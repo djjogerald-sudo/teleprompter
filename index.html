@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Megaphone Pro — AI Video Prompter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:opsz,wght@9..40,300;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #0a0a0f;
+    --bg2:     #111118;
+    --bg3:     #1a1a24;
+    --border:  #2a2a3a;
+    --border2: #3a3a50;
+    --text:    #e8e8f0;
+    --muted:   #6b6b88;
+    --accent:  #7c3aed;
+    --accent2: #a855f7;
+    --green:   #10b981;
+    --red:     #ef4444;
+    --yellow:  #fbbf24;
+    --mono:    'Space Mono', monospace;
+    --sans:    'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); overflow-x: hidden; }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* Noise texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.8);
+    backdrop-filter: blur(12px);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--mono);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .logo-icon {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 0 20px rgba(124,58,237,0.4);
+  }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 4px 10px;
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* ── MAIN GRID ── */
+  main {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 28px;
+    gap: 24px;
+  }
+
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; }
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px;
+  }
+
+  .card-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-label::before {
+    content: '';
+    display: inline-block;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* ── LEFT PANEL ── */
+  .left-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  textarea {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.7;
+    resize: vertical;
+    min-height: 160px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+
+  /* ── BUTTONS ── */
+  button {
+    cursor: pointer;
+    border: none;
+    font-family: var(--sans);
+    font-weight: 500;
+    border-radius: 10px;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+
+  button:active { transform: scale(0.98); }
+  button:disabled { opacity: 0.35; cursor: not-allowed; }
+  button:disabled:active { transform: none; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #6d28d9);
+    color: #fff;
+    padding: 11px 18px;
+    font-size: 13px;
+    width: 100%;
+    box-shadow: 0 4px 20px rgba(124,58,237,0.25);
+  }
+
+  .btn-primary:hover:not(:disabled) { box-shadow: 0 4px 28px rgba(124,58,237,0.45); filter: brightness(1.08); }
+
+  .btn-green {
+    background: linear-gradient(135deg, var(--green), #059669);
+    color: #fff;
+    padding: 11px 18px;
+    font-size: 13px;
+    width: 100%;
+    box-shadow: 0 4px 20px rgba(16,185,129,0.2);
+  }
+
+  .btn-green:hover:not(:disabled) { filter: brightness(1.1); }
+
+  .btn-red {
+    background: linear-gradient(135deg, var(--red), #dc2626);
+    color: #fff;
+    padding: 11px 18px;
+    font-size: 13px;
+    flex: 1;
+    box-shadow: 0 4px 16px rgba(239,68,68,0.2);
+  }
+
+  .btn-red:hover:not(:disabled) { filter: brightness(1.1); }
+
+  .btn-ghost {
+    background: var(--bg3);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 11px 18px;
+    font-size: 13px;
+    flex: 1;
+  }
+
+  .btn-ghost:hover:not(:disabled) { border-color: var(--border2); background: #222230; }
+
+  .btn-row { display: flex; gap: 10px; }
+
+  /* ── TOGGLE ── */
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--border);
+    margin-top: 4px;
+  }
+
+  .toggle-info h4 { font-size: 13px; font-weight: 500; }
+  .toggle-info p  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .switch {
+    position: relative;
+    width: 44px; height: 24px;
+  }
+
+  .switch input { opacity: 0; width: 0; height: 0; }
+
+  .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 24px;
+    cursor: pointer;
+    transition: 0.2s;
+  }
+
+  .slider::before {
+    content: '';
+    position: absolute;
+    left: 3px; top: 3px;
+    width: 16px; height: 16px;
+    background: var(--muted);
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+
+  .switch input:checked + .slider { background: var(--accent); border-color: var(--accent); }
+  .switch input:checked + .slider::before { transform: translateX(20px); background: #fff; }
+
+  /* ── FONT SIZE SLIDER ── */
+  .range-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0 0;
+  }
+
+  .range-row label { font-size: 12px; color: var(--muted); white-space: nowrap; min-width: 80px; font-family: var(--mono); }
+
+  input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--border2);
+    border-radius: 3px;
+    outline: none;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    background: var(--accent2);
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(168,85,247,0.5);
+  }
+
+  .range-val {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent2);
+    min-width: 32px;
+    text-align: right;
+  }
+
+  /* ── DOWNLOAD CARD ── */
+  #downloadCard {
+    display: none;
+    border-color: rgba(16,185,129,0.3);
+  }
+
+  #downloadCard.visible { display: block; }
+
+  #recordedPlayback {
+    width: 100%;
+    border-radius: 10px;
+    background: #000;
+    border: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+
+  .btn-dl {
+    background: linear-gradient(135deg, var(--green), #047857);
+    color: #fff;
+    padding: 11px 18px;
+    font-size: 13px;
+    width: 100%;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    text-decoration: none;
+    font-family: var(--sans);
+    font-weight: 500;
+    transition: filter 0.15s;
+  }
+
+  .btn-dl:hover { filter: brightness(1.1); }
+
+  /* ── RIGHT PANEL: PHONE FRAME ── */
+  .right-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .phone-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .phone-frame {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 9 / 16;
+    background: #000;
+    border-radius: 36px;
+    overflow: hidden;
+    border: 5px solid #1f1f2e;
+    box-shadow: 0 0 0 1px #333, 0 32px 80px rgba(0,0,0,0.8), 0 0 40px rgba(124,58,237,0.1);
+  }
+
+  /* phone notch */
+  .phone-frame::before {
+    content: '';
+    position: absolute;
+    top: 10px; left: 50%;
+    transform: translateX(-50%);
+    width: 80px; height: 22px;
+    background: #0a0a0f;
+    border-radius: 20px;
+    z-index: 20;
+  }
+
+  #webcamPreview {
+    position: absolute;
+    inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+    transform: scaleX(-1);
+    background: var(--bg3);
+  }
+
+  /* ── TELEPROMPTER OVERLAY ── */
+  .prompter-overlay {
+    position: absolute;
+    top: 48px;
+    left: 10px; right: 10px;
+    height: 38%;
+    background: rgba(0,0,0,0.72);
+    backdrop-filter: blur(10px);
+    border-radius: 18px;
+    border: 1px solid rgba(255,255,255,0.1);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    z-index: 10;
+  }
+
+  #prompterTrack {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 12px 8px;
+    text-align: center;
+    scroll-behavior: smooth;
+  }
+
+  #prompterTrack::-webkit-scrollbar { width: 3px; }
+  #prompterTrack::-webkit-scrollbar-track { background: transparent; }
+  #prompterTrack::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 3px; }
+
+  #prompterTargetText {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 17px;
+    line-height: 1.55;
+    color: var(--yellow);
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+    letter-spacing: 0.2px;
+  }
+
+  .prompter-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    flex-shrink: 0;
+  }
+
+  .speed-btns { display: flex; gap: 5px; }
+
+  .mini-btn {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.6);
+    font-size: 9px;
+    padding: 3px 7px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-family: var(--mono);
+    transition: all 0.15s;
+  }
+
+  .mini-btn:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+  #prompterSpeedDisplay {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--yellow);
+    background: rgba(0,0,0,0.4);
+    padding: 3px 7px;
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  /* ── REC BADGE ── */
+  #recordingBadge {
+    display: none;
+    position: absolute;
+    top: 56px; right: 16px;
+    background: rgba(239,68,68,0.9);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 700;
+    font-family: var(--mono);
+    padding: 4px 9px;
+    border-radius: 20px;
+    align-items: center;
+    gap: 5px;
+    z-index: 15;
+    animation: pulse-badge 1.2s infinite;
+  }
+
+  #recordingBadge.active { display: flex; }
+
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.65; }
+  }
+
+  .rec-dot { width: 6px; height: 6px; background: #fff; border-radius: 50%; }
+
+  /* ── BOTTOM PLAY/PAUSE CONTROL ── */
+  .phone-bottom-ctrl {
+    position: absolute;
+    bottom: 14px;
+    left: 10px; right: 10px;
+    z-index: 10;
+  }
+
+  #playPauseBtn {
+    width: 100%;
+    background: rgba(124,58,237,0.85);
+    border: 1px solid rgba(168,85,247,0.4);
+    color: #fff;
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 9px 14px;
+    border-radius: 12px;
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s;
+  }
+
+  #playPauseBtn:hover { background: rgba(124,58,237,0.95); }
+
+  /* ── STYLE PRESETS ── */
+  .style-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  .style-preset {
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 11px;
+    font-family: var(--mono);
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .style-preset:hover { transform: scale(1.05); }
+  .style-preset.active { border-color: currentColor; }
+
+  .preset-yellow { background: rgba(251,191,36,0.12); color: var(--yellow); }
+  .preset-white  { background: rgba(255,255,255,0.08); color: #e8e8f0; }
+  .preset-green  { background: rgba(16,185,129,0.12); color: var(--green); }
+  .preset-cyan   { background: rgba(6,182,212,0.12); color: #22d3ee; }
+
+  /* ── STATUS LINE ── */
+  #statusLine {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    min-height: 18px;
+    transition: color 0.2s;
+  }
+
+  #statusLine.ok  { color: var(--green); }
+  #statusLine.err { color: var(--red); }
+
+  /* ── ICONS ── */
+  svg.icon { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ── ANIMATE IN ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .card { animation: fadeUp 0.4s ease both; }
+  .card:nth-child(1) { animation-delay: 0.05s; }
+  .card:nth-child(2) { animation-delay: 0.10s; }
+  .card:nth-child(3) { animation-delay: 0.15s; }
+  .right-panel       { animation: fadeUp 0.4s ease 0.2s both; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">📣</div>
+    Megaphone Pro
+  </div>
+  <div class="badge">v2.0 · Single File</div>
+</header>
+
+<main>
+
+  <!-- ════════════ LEFT PANEL ════════════ -->
+  <div class="left-panel">
+
+    <!-- Script Input -->
+    <div class="card">
+      <div class="card-label">01 — Script Input</div>
+      <textarea id="scriptInput" rows="7" placeholder="Paste or type your video script here…
+
+Example:
+You can now make talking head videos in under five minutes. Here is the one tool changing the game for creators. Start by pasting your script right here. Hit sync and the teleprompter loads instantly. Start recording, read your lines, and download your clip."></textarea>
+      <button class="btn-primary" onclick="loadScript()" style="margin-top:12px">
+        <svg class="icon" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Sync to Teleprompter
+      </button>
+    </div>
+
+    <!-- Studio Controls -->
+    <div class="card">
+      <div class="card-label">02 — Studio Controls</div>
+
+      <button id="cameraBtn" class="btn-green" onclick="startCamera()">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+        Initialize Camera
+      </button>
+
+      <div class="btn-row" style="margin-top:10px">
+        <button id="recordBtn" class="btn-red" onclick="startRecording()" disabled>
+          <svg class="icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="currentColor" stroke="none"/></svg>
+          Record
+        </button>
+        <button id="stopBtn" class="btn-ghost" onclick="stopRecording()" disabled>
+          <svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" stroke="none"/></svg>
+          Stop & Save
+        </button>
+      </div>
+
+      <!-- Font size control -->
+      <div class="range-row">
+        <label>Text Size</label>
+        <input type="range" id="fontSizeRange" min="12" max="28" value="17" oninput="changeFontSize(this.value)">
+        <span class="range-val" id="fontSizeVal">17px</span>
+      </div>
+
+      <!-- Voice activation toggle -->
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <h4>Voice-Activated Scroll</h4>
+          <p>Auto-pauses when you stop speaking</p>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="voiceToggle" onchange="toggleVoiceControl()">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Caption Style Presets -->
+    <div class="card">
+      <div class="card-label">03 — Caption Color</div>
+      <div class="style-row">
+        <button class="style-preset preset-yellow active" onclick="setColor('#fbbf24', this)">Yellow</button>
+        <button class="style-preset preset-white"  onclick="setColor('#f0f0f8', this)">White</button>
+        <button class="style-preset preset-green"  onclick="setColor('#10b981', this)">Green</button>
+        <button class="style-preset preset-cyan"   onclick="setColor('#22d3ee', this)">Cyan</button>
+      </div>
+    </div>
+
+    <!-- Download card (hidden until recording stops) -->
+    <div class="card" id="downloadCard">
+      <div class="card-label" style="color: var(--green)">04 — Export Ready</div>
+      <video id="recordedPlayback" controls></video>
+      <a id="downloadBtn" href="#" class="btn-dl">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Video File
+      </a>
+    </div>
+
+  </div><!-- /left-panel -->
+
+
+  <!-- ════════════ RIGHT PANEL ════════════ -->
+  <div class="right-panel">
+
+    <div id="statusLine">Camera not initialized — click Initialize Camera to begin</div>
+
+    <!-- Phone frame -->
+    <div class="phone-wrap">
+      <div class="phone-frame">
+
+        <!-- Webcam layer -->
+        <video id="webcamPreview" autoplay playsinline muted></video>
+
+        <!-- Teleprompter overlay -->
+        <div class="prompter-overlay">
+          <div id="prompterTrack">
+            <div style="height:20px"></div>
+            <p id="prompterTargetText">Paste your script on the left, then tap Sync.</p>
+            <div style="height:50px"></div>
+          </div>
+          <div class="prompter-controls">
+            <div class="speed-btns">
+              <button class="mini-btn" onclick="changeSpeed(-0.5)">◀ Slower</button>
+              <button class="mini-btn" onclick="changeSpeed(0.5)">Faster ▶</button>
+            </div>
+            <span id="prompterSpeedDisplay">2.0×</span>
+          </div>
+        </div>
+
+        <!-- REC badge -->
+        <div id="recordingBadge">
+          <div class="rec-dot"></div> REC
+        </div>
+
+        <!-- Play/Pause button -->
+        <div class="phone-bottom-ctrl">
+          <button id="playPauseBtn" onclick="togglePrompter()">
+            ▶ Start Teleprompter
+          </button>
+        </div>
+
+      </div><!-- /phone-frame -->
+    </div><!-- /phone-wrap -->
+
+  </div><!-- /right-panel -->
+
+</main>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────────────────────
+let stream          = null;
+let mediaRecorder   = null;
+let recordedChunks  = [];
+let prompterSpeed   = 2.0;
+let isScrolling     = false;
+let currentScrollTop = 0;
+let audioContext, analyser, microphone, scriptProcessor;
+let silenceTimeout  = null;
+
+// ─────────────────────────────────────────────────────────────────
+//  STATUS HELPER
+// ─────────────────────────────────────────────────────────────────
+function setStatus(msg, type = '') {
+  const el = document.getElementById('statusLine');
+  el.textContent = msg;
+  el.className   = type;
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  1. SCRIPT MANAGEMENT
+// ─────────────────────────────────────────────────────────────────
+function loadScript() {
+  const text   = document.getElementById('scriptInput').value.trim();
+  const target = document.getElementById('prompterTargetText');
+  if (!text) { target.textContent = 'No script detected — paste one on the left.'; return; }
+  target.textContent = text;
+  resetScroll();
+  setStatus('Script synced ✓ — hit play to start scrolling', 'ok');
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  2. CAMERA INIT
+// ─────────────────────────────────────────────────────────────────
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
+      audio: true
+    });
+    const vid = document.getElementById('webcamPreview');
+    vid.srcObject = stream;
+    vid.muted     = true;
+    await vid.play();
+
+    document.getElementById('cameraBtn').disabled = true;
+    document.getElementById('cameraBtn').textContent = '✓ Camera Active';
+    document.getElementById('recordBtn').disabled = false;
+    setStatus('Camera initialized — ready to record', 'ok');
+  } catch (err) {
+    console.error(err);
+    setStatus('Camera access denied — please allow permissions in your browser', 'err');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  3. RECORDING
+// ─────────────────────────────────────────────────────────────────
+function startRecording() {
+  if (!stream) { setStatus('Initialize camera first', 'err'); return; }
+  recordedChunks = [];
+
+  // Pick best supported MIME type
+  const mimes = [
+    'video/webm;codecs=vp9,opus',
+    'video/webm;codecs=vp8,opus',
+    'video/webm',
+    'video/mp4'
+  ];
+  let opts = {};
+  for (const m of mimes) {
+    if (MediaRecorder.isTypeSupported(m)) { opts = { mimeType: m }; break; }
+  }
+
+  try {
+    mediaRecorder = new MediaRecorder(stream, opts);
+  } catch(e) {
+    mediaRecorder = new MediaRecorder(stream);
+  }
+
+  mediaRecorder.ondataavailable = e => { if (e.data?.size > 0) recordedChunks.push(e.data); };
+
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType });
+    const url  = URL.createObjectURL(blob);
+    const ext  = mediaRecorder.mimeType.includes('mp4') ? 'mp4' : 'webm';
+
+    document.getElementById('recordedPlayback').src = url;
+    const dl = document.getElementById('downloadBtn');
+    dl.href     = url;
+    dl.download = `megaphone-${Date.now()}.${ext}`;
+
+    document.getElementById('downloadCard').classList.add('visible');
+    setStatus('Video saved — download below ✓', 'ok');
+  };
+
+  mediaRecorder.start(10);
+  document.getElementById('recordingBadge').classList.add('active');
+  document.getElementById('recordBtn').disabled = true;
+  document.getElementById('stopBtn').disabled   = false;
+
+  resetScroll();
+  startPrompterScroll();
+  setStatus('● Recording…', 'err');
+
+  if (document.getElementById('voiceToggle').checked) initAudio();
+}
+
+function stopRecording() {
+  if (mediaRecorder?.state !== 'inactive') mediaRecorder.stop();
+  stopPrompterScroll();
+  stopAudio();
+  document.getElementById('recordingBadge').classList.remove('active');
+  document.getElementById('recordBtn').disabled = false;
+  document.getElementById('stopBtn').disabled   = true;
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  4. TELEPROMPTER SCROLL ENGINE
+// ─────────────────────────────────────────────────────────────────
+function scrollLoop() {
+  if (!isScrolling) return;
+  const track = document.getElementById('prompterTrack');
+  currentScrollTop += prompterSpeed * 0.3;
+  track.scrollTop   = currentScrollTop;
+
+  if (track.scrollTop >= track.scrollHeight - track.clientHeight) {
+    stopPrompterScroll();
+    setStatus('End of script reached ✓', 'ok');
+    return;
+  }
+  requestAnimationFrame(scrollLoop);
+}
+
+function startPrompterScroll() {
+  if (isScrolling) return;
+  isScrolling = true;
+  document.getElementById('playPauseBtn').textContent = '⏸ Pause Teleprompter';
+  requestAnimationFrame(scrollLoop);
+}
+
+function stopPrompterScroll() {
+  isScrolling = false;
+  document.getElementById('playPauseBtn').textContent = '▶ Resume Teleprompter';
+}
+
+function togglePrompter() {
+  isScrolling ? stopPrompterScroll() : startPrompterScroll();
+}
+
+function resetScroll() {
+  currentScrollTop = 0;
+  document.getElementById('prompterTrack').scrollTop = 0;
+}
+
+function changeSpeed(delta) {
+  prompterSpeed = Math.max(0.5, Math.min(10, prompterSpeed + delta));
+  document.getElementById('prompterSpeedDisplay').textContent = prompterSpeed.toFixed(1) + '×';
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  5. FONT SIZE
+// ─────────────────────────────────────────────────────────────────
+function changeFontSize(v) {
+  document.getElementById('prompterTargetText').style.fontSize = v + 'px';
+  document.getElementById('fontSizeVal').textContent = v + 'px';
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  6. CAPTION COLOR PRESETS
+// ─────────────────────────────────────────────────────────────────
+function setColor(color, btn) {
+  document.getElementById('prompterTargetText').style.color = color;
+  document.querySelectorAll('.style-preset').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────────────
+//  7. VOICE-ACTIVATED SCROLL (Web Audio API)
+// ─────────────────────────────────────────────────────────────────
+async function initAudio() {
+  if (!stream) return;
+  try {
+    audioContext   = new (window.AudioContext || window.webkitAudioContext)();
+    analyser       = audioContext.createAnalyser();
+    microphone     = audioContext.createMediaStreamSource(stream);
+    scriptProcessor = audioContext.createScriptProcessor(2048, 1, 1);
+
+    analyser.smoothingTimeConstant = 0.75;
+    analyser.fftSize = 512;
+
+    microphone.connect(analyser);
+    analyser.connect(scriptProcessor);
+    scriptProcessor.connect(audioContext.destination);
+
+    scriptProcessor.onaudioprocess = () => {
+      const arr = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(arr);
+      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+
+      if (avg > 14) {
+        if (silenceTimeout) { clearTimeout(silenceTimeout); silenceTimeout = null; }
+        if (!isScrolling && mediaRecorder?.state === 'recording') startPrompterScroll();
+      } else {
+        if (silenceTimeout || !isScrolling) return;
+        silenceTimeout = setTimeout(() => { stopPrompterScroll(); silenceTimeout = null; }, 1200);
+      }
+    };
+  } catch(e) { console.error('Audio init failed:', e); }
+}
+
+function stopAudio() {
+  try { scriptProcessor?.disconnect(); analyser?.disconnect(); microphone?.disconnect(); } catch(e){}
+  if (audioContext?.state !== 'closed') audioContext?.close();
+  if (silenceTimeout) { clearTimeout(silenceTimeout); silenceTimeout = null; }
+}
+
+function toggleVoiceControl() {
+  const on = document.getElementById('voiceToggle').checked;
+  if (on && mediaRecorder?.state === 'recording') initAudio();
+  else stopAudio();
+}
+</script>
+</body>
+</html>
