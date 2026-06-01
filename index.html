@@ -227,27 +227,25 @@ textarea::placeholder { color: var(--muted); }
   background: #000;
 }
 
-/* Prompter overlay — centred, transparent during recording */
+/* Prompter overlay — upper-middle, close to front camera */
 .prompter-overlay {
   position: absolute;
-  /* vertically centred, away from record controls at bottom */
-  top: 50%;
-  transform: translateY(-50%);
+  top: 22%;            /* below REC badge, near the lens */
   left: 0; right: 0;
-  height: 46%;           /* tall enough to show several lines */
+  height: 40%;
   background: rgba(0,0,0,0.72);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid rgba(255,255,255,0.08);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
+  border-top: 1px solid rgba(255,255,255,0.1);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
   z-index: 20;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: background 0.4s, backdrop-filter 0.4s, border-color 0.4s;
+  transition: background 0.4s, border-color 0.4s;
 }
 
-/* When recording → fully transparent, text only */
+/* When recording → fully transparent, only text floats */
 .prompter-overlay.recording {
   background: transparent;
   backdrop-filter: none;
@@ -264,35 +262,52 @@ textarea::placeholder { color: var(--muted); }
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 20px 20px 12px;
+  padding: 12px 16px 8px;
   text-align: center;
-  /* fade top & bottom edges so text glides smoothly */
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
-  mask-image: linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%);
 }
 #prompterTrack::-webkit-scrollbar { display: none; }
 
-#prompterText {
-  font-family: var(--sans);
-  font-weight: 700;
-  font-size: 20px;
-  line-height: 1.55;
-  color: var(--yellow);
-  /* heavy shadow keeps text legible against any background */
-  text-shadow:
-    0 0 12px rgba(0,0,0,1),
-    0 2px 4px rgba(0,0,0,1),
-    0 0 30px rgba(0,0,0,0.9);
+/* ── sentence nodes ── */
+.sentence-node {
   display: block;
-  padding-bottom: 60px; /* scroll buffer */
+  font-family: var(--sans);
+  font-weight: 600;
+  font-size: 18px;
+  line-height: 1.55;
+  padding: 5px 6px;
+  margin: 0 auto;
+  max-width: 96%;
+  border-radius: 8px;
+  color: rgba(255,255,255,0.28);
+  text-shadow: 0 1px 6px rgba(0,0,0,0.8);
+  transition: color 0.25s, text-shadow 0.25s, transform 0.2s;
+  cursor: pointer;
 }
 
-/* prompter speed strip */
+.sentence-node.active {
+  color: var(--yellow);
+  font-weight: 700;
+  transform: scale(1.04);
+  text-shadow:
+    0 0 14px rgba(0,0,0,1),
+    0 2px 4px rgba(0,0,0,1),
+    0 0 28px rgba(251,191,36,0.35);
+}
+
+.sentence-node.done {
+  color: rgba(255,255,255,0.16);
+}
+
+.scroll-spacer { display: block; height: 48px; }
+
+/* prompter strip */
 .prompter-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 7px 14px;
+  padding: 6px 14px;
   border-top: 1px solid rgba(255,255,255,0.08);
   flex-shrink: 0;
   transition: opacity 0.3s;
@@ -315,6 +330,22 @@ textarea::placeholder { color: var(--muted); }
   font-size: 10px;
   color: var(--yellow);
 }
+
+/* tap hint below prompter */
+.tap-hint {
+  position: absolute;
+  top: calc(22% + 40% + 6px);
+  left: 50%; transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgba(255,255,255,0.3);
+  letter-spacing: 1px;
+  pointer-events: none;
+  z-index: 21;
+  white-space: nowrap;
+  transition: opacity 0.3s;
+}
+.tap-hint.hidden { opacity: 0; }
 
 /* REC badge */
 #recBadge {
@@ -585,16 +616,21 @@ You can make talking head videos in five minutes flat. Here is the tool changing
   <div id="recBadge"><div class="rec-dot"></div> REC</div>
 
   <!-- Teleprompter overlay -->
-  <div class="prompter-overlay">
+  <div class="prompter-overlay" id="prompterOverlay" onclick="advanceSentence()">
     <div id="prompterTrack">
-      <span id="prompterText">Sync your script on the Script tab first.</span>
+      <span class="scroll-spacer"></span>
+      <!-- sentences injected by JS -->
+      <span id="prompterText" class="sentence-node active">Sync your script on the Script tab first.</span>
+      <span class="scroll-spacer"></span>
     </div>
     <div class="prompter-strip">
-      <button class="speed-btn" onclick="changeSpeed(-0.5)">◀ Slower</button>
+      <button class="speed-btn" onclick="event.stopPropagation(); changeSpeed(-0.5)">◀ Slower</button>
       <span id="speedDisplay">2.0×</span>
-      <button class="speed-btn" onclick="changeSpeed(0.5)">Faster ▶</button>
+      <button class="speed-btn" onclick="event.stopPropagation(); changeSpeed(0.5)">Faster ▶</button>
     </div>
   </div>
+  <!-- tap hint -->
+  <div class="tap-hint" id="tapHint">TAP TO ADVANCE</div>
 
   <!-- Bottom controls -->
   <div class="record-controls">
@@ -719,20 +755,109 @@ function dot(state) {
 }
 
 // ─────────────────────────────────────────
-//  SCRIPT SYNC
+//  SCRIPT SYNC  — sentence-by-sentence
 // ─────────────────────────────────────────
+let sentences   = [];   // array of sentence strings
+let activeSentIdx = 0;  // currently highlighted index
+
+function parseSentences(text) {
+  // Safari-safe sentence splitter (no lookbehind)
+  // 1. normalise newlines
+  const flat = text.replace(/\r\n/g, '\n');
+  // 2. split paragraphs on blank lines
+  const paras = flat.split(/\n[ \t]*\n/);
+  const result = [];
+  for (const para of paras) {
+    const p = para.replace(/\n/g, ' ').trim();
+    if (!p) continue;
+    // 3. match sentences: text ending in . ! ? (including quotes/parens after)
+    const matches = p.match(/[^.!?]+[.!?][)"']?\s*/g);
+    if (matches) {
+      for (const m of matches) {
+        const s = m.trim();
+        if (s) result.push(s);
+      }
+      // leftover fragment without punctuation
+      const joined = matches.join('');
+      const leftover = p.slice(joined.length).trim();
+      if (leftover) result.push(leftover);
+    } else {
+      result.push(p);
+    }
+  }
+  return result.length > 0 ? result : [text.trim()];
+}
+
+function buildPrompterDOM() {
+  const track = document.getElementById('prompterTrack');
+  track.innerHTML = '';
+
+  const topSpacer = document.createElement('span');
+  topSpacer.className = 'scroll-spacer';
+  track.appendChild(topSpacer);
+
+  sentences.forEach((s, i) => {
+    const node = document.createElement('span');
+    node.className = 'sentence-node' + (i === 0 ? ' active' : '');
+    node.dataset.idx = i;
+    node.textContent = s;
+    node.addEventListener('click', (e) => {
+      e.stopPropagation();
+      jumpToSentence(i);
+    });
+    track.appendChild(node);
+  });
+
+  const botSpacer = document.createElement('span');
+  botSpacer.className = 'scroll-spacer';
+  track.appendChild(botSpacer);
+
+  activeSentIdx = 0;
+}
+
+function jumpToSentence(idx) {
+  if (idx < 0 || idx >= sentences.length) return;
+  const track = document.getElementById('prompterTrack');
+  const nodes  = track.querySelectorAll('.sentence-node');
+
+  nodes.forEach((n, i) => {
+    n.classList.remove('active', 'done');
+    if (i < idx)  n.classList.add('done');
+    if (i === idx) n.classList.add('active');
+  });
+
+  activeSentIdx = idx;
+
+  // scroll the active node to the vertical centre of the track
+  const activeNode = nodes[idx];
+  if (activeNode) {
+    const trackMid  = track.clientHeight / 2;
+    const nodeTop   = activeNode.offsetTop;
+    const nodeHalf  = activeNode.clientHeight / 2;
+    track.scrollTo({ top: nodeTop - trackMid + nodeHalf, behavior: 'smooth' });
+  }
+}
+
+function advanceSentence() {
+  // tap anywhere on the overlay to go to the next sentence
+  if (sentences.length === 0) return;
+  const next = activeSentIdx + 1;
+  if (next < sentences.length) {
+    jumpToSentence(next);
+  }
+}
+
 function syncScript() {
-  const txt = document.getElementById('scriptInput').value.trim();
-  const el  = document.getElementById('prompterText');
+  const txt    = document.getElementById('scriptInput').value.trim();
   const banner = document.getElementById('scriptStatus');
   if (!txt) {
     banner.innerHTML = '<div class="status-banner err">Please enter a script first.</div>';
     return;
   }
-  el.textContent = txt;
-  resetScroll();
+  sentences = parseSentences(txt);
+  buildPrompterDOM();
   dot('ok');
-  banner.innerHTML = '<div class="status-banner ok">✓ Script synced — go to Record</div>';
+  banner.innerHTML = '<div class="status-banner ok">✓ ' + sentences.length + ' sentences synced — go to Record</div>';
 }
 
 // ─────────────────────────────────────────
@@ -802,6 +927,7 @@ function beginRecording() {
   document.getElementById('recRing').classList.add('recording');
   document.getElementById('recBadge').classList.add('active');
   document.querySelector('.prompter-overlay').classList.add('recording');
+  document.getElementById('tapHint').classList.add('hidden');
   dot('rec');
 
   resetScroll();
@@ -815,6 +941,7 @@ function stopRecording() {
   document.getElementById('recRing').classList.remove('recording');
   document.getElementById('recBadge').classList.remove('active');
   document.querySelector('.prompter-overlay').classList.remove('recording');
+  document.getElementById('tapHint').classList.remove('hidden');
   stopScroll();
   stopAudio();
   dot('ok');
@@ -844,31 +971,39 @@ function buildExport() {
 }
 
 // ─────────────────────────────────────────
-//  TELEPROMPTER SCROLL
+//  TELEPROMPTER — auto-advance loop
 // ─────────────────────────────────────────
-function scrollLoop() {
-  if (!isScrolling) return;
-  const track = document.getElementById('prompterTrack');
-  scrollTop += speed * 0.28;
-  track.scrollTop = scrollTop;
-  if (track.scrollTop >= track.scrollHeight - track.clientHeight) {
-    stopScroll();
-    return;
-  }
-  animFrame = requestAnimationFrame(scrollLoop);
-}
+// 'speed' now controls seconds-per-sentence (lower = faster)
+// default 4s per sentence; range 1–10
+let sentenceInterval = null;
 
 function startScroll() {
   if (isScrolling) return;
   isScrolling = true;
-  document.getElementById('playPauseBtn').textContent = '⏸ Pause Teleprompter';
-  animFrame = requestAnimationFrame(scrollLoop);
+  document.getElementById('playPauseBtn').textContent = '⏸ Pause';
+  if (sentences.length > 0) jumpToSentence(activeSentIdx);
+  scheduleNext();
+}
+
+function scheduleNext() {
+  clearInterval(sentenceInterval);
+  // speed slider repurposed: 1 (fast ~1.5s) → 10 (slow ~12s)
+  const delay = Math.round((11 - speed) * 1200);
+  sentenceInterval = setInterval(() => {
+    if (!isScrolling) return;
+    if (activeSentIdx < sentences.length - 1) {
+      jumpToSentence(activeSentIdx + 1);
+    } else {
+      stopScroll(); // reached end
+    }
+  }, delay);
 }
 
 function stopScroll() {
   isScrolling = false;
-  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
-  document.getElementById('playPauseBtn').textContent = '▶ Resume Teleprompter';
+  clearInterval(sentenceInterval);
+  sentenceInterval = null;
+  document.getElementById('playPauseBtn').textContent = '▶ Start / Resume';
 }
 
 function togglePrompter() {
@@ -876,26 +1011,30 @@ function togglePrompter() {
 }
 
 function resetScroll() {
-  scrollTop = 0;
-  document.getElementById('prompterTrack').scrollTop = 0;
+  stopScroll();
+  if (sentences.length > 0) jumpToSentence(0);
+  else {
+    const track = document.getElementById('prompterTrack');
+    if (track) track.scrollTop = 0;
+  }
 }
 
 function resetAndStop() {
-  stopScroll();
   resetScroll();
   if (isRecording) stopRecording();
 }
 
 function changeSpeed(d) {
-  speed = Math.max(0.5, Math.min(10, speed + d));
+  speed = Math.max(1, Math.min(10, speed + d));
   document.getElementById('speedDisplay').textContent = speed.toFixed(1) + '×';
+  if (isScrolling) scheduleNext(); // re-schedule with new delay
 }
 
 // ─────────────────────────────────────────
 //  FONT SIZE
 // ─────────────────────────────────────────
 function changeFontSize(v) {
-  document.getElementById('prompterText').style.fontSize = v + 'px';
+  document.querySelectorAll('.sentence-node').forEach(n => n.style.fontSize = v + 'px');
   document.getElementById('fontSizeVal').textContent = v + 'px';
 }
 
@@ -903,7 +1042,11 @@ function changeFontSize(v) {
 //  CAPTION COLOUR
 // ─────────────────────────────────────────
 function setColor(c, el) {
-  document.getElementById('prompterText').style.color = c;
+  // store the chosen colour on root so new active nodes pick it up
+  document.documentElement.style.setProperty('--yellow', c);
+  // update currently active node immediately
+  const active = document.querySelector('.sentence-node.active');
+  if (active) active.style.color = c;
   document.querySelectorAll('.color-chip').forEach(ch => ch.classList.remove('active'));
   el.classList.add('active');
 }
